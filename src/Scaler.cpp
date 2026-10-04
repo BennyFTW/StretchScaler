@@ -25,7 +25,6 @@
 #include "Scaler.h"
 #include "Enum.h"
 #include "Log.h"
-#include "FpsCounter.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -212,7 +211,6 @@ struct Scaler::Impl {
     com_ptr<ID2D1Bitmap1> d2dTarget;
     com_ptr<IDWriteTextFormat> textFormat;
     com_ptr<ID2D1SolidColorBrush> textBrush, bgBrush;
-    GameFpsCounter gameFps;
     uint32_t shownFrames = 0;
     int64_t fpsWindowStart = 0;
     std::wstring fpsText = L"-- FPS";
@@ -232,17 +230,6 @@ struct Scaler::Impl {
     void PostStopped(const wchar_t* why);
     void Release();
 };
-
-bool EnablePrivilege(const wchar_t* name) {
-    HANDLE token = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) return false;
-    TOKEN_PRIVILEGES tp{1};
-    bool ok = LookupPrivilegeValueW(nullptr, name, &tp.Privileges[0].Luid);
-    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-    ok = ok && AdjustTokenPrivileges(token, FALSE, &tp, 0, nullptr, nullptr) && GetLastError() == ERROR_SUCCESS;
-    CloseHandle(token);
-    return ok;
-}
 
 bool Scaler::Impl::CreateDevice(HMONITOR hmon) {
     // Prefer the adapter driving the output monitor so presentation avoids a cross-adapter copy.
@@ -277,9 +264,8 @@ bool Scaler::Impl::CreateDevice(HMONITOR hmon) {
     // WGC uses the device from its own threads.
     if (auto mt = dev.try_as<ID3D11Multithread>()) mt->SetMultithreadProtected(TRUE);
     // Let our tiny copy+stretch jump ahead of the game's GPU work so it isn't stuck behind a full game frame.
-    EnablePrivilege(SE_INC_BASE_PRIORITY_NAME);
     HRESULT gp = dxgiDev->SetGPUThreadPriority(7);
-    if (FAILED(gp)) Log(L"GPU priority boost not permitted (0x%08X) - run as admin for it.", gp);
+    if (FAILED(gp)) Log(L"GPU priority boost not permitted (0x%08X) - harmless.", gp);
     else Log(L"GPU priority boost enabled.");
     if (auto d1 = dxgiDev.try_as<IDXGIDevice1>()) d1->SetMaximumFrameLatency(1);
 
@@ -411,7 +397,6 @@ bool Scaler::Impl::CreateTextOverlay() {
         d2dCtx = nullptr; d2dTarget = nullptr; textFormat = nullptr;
         return false;
     }
-    if (opt.gamePid) gameFps.Start(opt.gamePid);
     return true;
 }
 
@@ -424,14 +409,9 @@ void Scaler::Impl::UpdateFpsText() {
     double shown = shownFrames * 1e7 / (double)dt;
     shownFrames = 0;
     fpsWindowStart = now;
-    wchar_t buf[128];
-    if (gameFps.Active()) {
-        double ms = 0;
-        double fps = gameFps.Fps(&ms);
-        swprintf_s(buf, L"%.0f FPS  %.1f ms  | shown %.0f", fps, ms, shown);
-    } else {
-        swprintf_s(buf, L"%.0f FPS (on-screen)", shown);
-    }
+    // Frames StretchScaler put on screen (it never looks at the game process). Max = refresh rate.
+    wchar_t buf[64];
+    swprintf_s(buf, L"%.0f FPS", shown);
     fpsText = buf;
 }
 
@@ -694,7 +674,6 @@ void Scaler::Impl::Release() {
         if (pool) pool.Close();
     } catch (...) {}
     session = nullptr; pool = nullptr; item = nullptr; rtDevice = nullptr;
-    gameFps.Stop();
     if (d2dCtx) d2dCtx->SetTarget(nullptr);
     bgBrush = nullptr; textBrush = nullptr; textFormat = nullptr; d2dTarget = nullptr; d2dCtx = nullptr; d2dFactory = nullptr;
     cursor = {};

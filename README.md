@@ -57,8 +57,8 @@ Closing the window leaves it running in the tray, so you only open it once per s
 
 ## Good to know
 
-- It asks for admin so the FPS counter can show your real game FPS. Without admin it only shows how many
-  frames hit the screen.
+- It runs as a normal user (no admin). The optional FPS counter shows how many frames StretchScaler puts on
+  screen, so it tops out at your refresh rate. It never reads anything from the game.
 - Alt+Tab minimizes the game so you get a clean desktop. Click it on the taskbar to jump back in. You can
   turn this off.
 - Latency is close to playing in a normal window. The stretched output skips the second trip through the

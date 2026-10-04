@@ -21,6 +21,9 @@ The status line in the app shows `output: hardware overlay (direct)` when this i
 
 - **Close or disable overlays on the gaming monitor.** Discord overlay, the NVIDIA/Steam overlays, Xbox Game Bar
   widgets, or any other always-on-top window can knock the output back to "composed".
+- **Screen recording and screenshots do it too.** Desktop capture (OBS display capture, Discord screen share,
+  screenshot tools) makes Windows compose the screen while it's running. Capturing just the game window in OBS
+  is fine.
 - **NVIDIA Control Panel > Manage 3D settings > Program settings > H1Z1: Low Latency Mode = On or Ultra.**
   It shortens the game's own render queue, which matters more than anything StretchScaler does.
 - **Keep the game's FPS high.** The capture can only grab a new frame when the game has drawn one.

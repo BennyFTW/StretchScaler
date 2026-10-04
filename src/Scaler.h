@@ -11,7 +11,6 @@ struct ScalerOptions {
     bool hideBorder = true;    // ask WGC not to draw the yellow capture border
     bool fpsOverlay = false;   // draw an FPS counter into the output
     int fpsCorner = 0;         // 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right
-    DWORD gamePid = 0;         // process to measure real FPS for (ETW, needs admin); 0 = on-screen FPS only
 };
 
 struct ScalerStats {

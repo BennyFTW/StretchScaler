@@ -3,7 +3,6 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <magnification.h>
-#include <shlobj.h>
 #include <shellapi.h>
 #include <windowsx.h>
 #include <winrt/base.h>
@@ -378,7 +377,6 @@ void StartScaling() {
     o.hideBorder = g.cfg.border;
     o.fpsOverlay = g.cfg.fps;
     o.fpsCorner = g.cfg.fpsCorner;
-    o.gamePid = src.pid;
     if (!g.scaler.Start(src.hwnd, mon.hmon, mon.rect, o, g.wnd, WM_APP_STOPPED)) {
         SetWindowTextW(g.stStatus, L"Start failed - see log.");
         g.suppressHwnd = src.hwnd; // no auto-retry loop on this window
@@ -479,7 +477,7 @@ void CreateControls() {
     g.chkFps = MakeCtl(L"BUTTON", L"Show FPS overlay in game", BS_AUTOCHECKBOX | WS_TABSTOP, 12, y, 190, 20, ID_FPS);
     g.cbFpsCorner = MakeCtl(L"COMBOBOX", L"", cbStyle, 205, y - 2, 120, 200, ID_FPSCORNER);
     AddItems(g.cbFpsCorner, {L"Top-left", L"Top-right", L"Bottom-left", L"Bottom-right"}, g.cfg.fpsCorner);
-    MakeCtl(L"STATIC", IsUserAnAdmin() ? L"admin: real game FPS" : L"run as admin for real game FPS", 0, 335, y + 1, 290, 20, -1);
+    MakeCtl(L"STATIC", L"frames shown on screen (max = refresh rate)", 0, 335, y + 1, 290, 20, -1);
     SetChecked(g.chkFps, g.cfg.fps);
     y += 24;
     g.chkMinimize = MakeCtl(L"BUTTON", L"Minimize the game to the taskbar when it loses focus (Alt+Tab)", BS_AUTOCHECKBOX | WS_TABSTOP, 12, y, 600, 20, ID_MINIMIZE);
@@ -522,7 +520,6 @@ LRESULT CALLBACK MainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         g.taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
         AddTray();
         SetTrayTip(L"StretchScaler - waiting for the game");
-        if (!IsUserAnAdmin()) Log(L"Not running as administrator: real game FPS needs admin.");
         {
             // Command line: /autostart  -> start scaling immediately;  /exitafter:N -> quit after N seconds (testing).
             std::wstring cmd = GetCommandLineW();
