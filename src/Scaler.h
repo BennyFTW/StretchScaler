@@ -9,6 +9,8 @@ struct ScalerOptions {
     bool stretch = true;       // true = stretch to fill (ignore aspect), false = fit (letterbox)
     bool drawCursor = true;    // draw the (hidden) system cursor ourselves at the stretched position
     bool hideBorder = true;    // ask WGC not to draw the yellow capture border
+    bool composedOutput = false; // true: let Windows compose the output (no hardware overlay/MPO, no GPU priority
+                                 // boost). +1 refresh latency, but avoids MPO stutter and keeps driver color settings.
     bool fpsOverlay = false;   // draw an FPS counter into the output
     int fpsCorner = 0;         // 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right
 };

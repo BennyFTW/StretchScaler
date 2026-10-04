@@ -276,9 +276,12 @@ bool Scaler::Impl::CreateDevice(HMONITOR hmon) {
     // WGC uses the device from its own threads.
     if (auto mt = dev.try_as<ID3D11Multithread>()) mt->SetMultithreadProtected(TRUE);
     // Let our tiny copy+stretch jump ahead of the game's GPU work so it isn't stuck behind a full game frame.
-    HRESULT gp = dxgiDev->SetGPUThreadPriority(7);
-    if (FAILED(gp)) Log(L"GPU priority boost not permitted (0x%08X) - harmless.", gp);
-    else Log(L"GPU priority boost enabled.");
+    // Skipped in compatible mode in case preempting the game's GPU work causes hitches on some drivers.
+    if (!opt.composedOutput) {
+        HRESULT gp = dxgiDev->SetGPUThreadPriority(7);
+        if (FAILED(gp)) Log(L"GPU priority boost not permitted (0x%08X) - harmless.", gp);
+        else Log(L"GPU priority boost enabled.");
+    }
     if (auto d1 = dxgiDev.try_as<IDXGIDevice1>()) d1->SetMaximumFrameLatency(1);
 
     com_ptr<::IInspectable> insp;
@@ -333,7 +336,10 @@ bool Scaler::Impl::CreateOverlay() {
                               kOverlayClass, L"StretchScaler Output", WS_POPUP,
                               mon.left, mon.top, outW, outH, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!overlay) { Log(L"CreateWindowEx(overlay) failed: %lu", GetLastError()); return false; }
-    SetLayeredWindowAttributes(overlay, 0, 255, LWA_ALPHA); // fully opaque, so it stays eligible for direct flip
+    // Fully opaque (255) keeps the output eligible for a hardware overlay plane / direct flip (lowest latency).
+    // 254 is visually identical but forces Windows to compose it like a normal window ("compatible" path).
+    SetLayeredWindowAttributes(overlay, 0, opt.composedOutput ? 254 : 255, LWA_ALPHA);
+    Log(L"Output path: %s", opt.composedOutput ? L"compatible (composed by Windows)" : L"direct (hardware overlay when possible)");
     return true;
 }
 

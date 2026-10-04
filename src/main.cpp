@@ -25,7 +25,7 @@ namespace {
 
 enum : UINT { WM_APP_LOG = WM_APP + 1, WM_APP_STOPPED, WM_APP_TRAY, WM_APP_SHOWUI };
 enum : int {
-    ID_SOURCE = 100, ID_REFRESH, ID_MATCH, ID_MONITOR, ID_SCALE, ID_FILTER, ID_PRESENT,
+    ID_SOURCE = 100, ID_REFRESH, ID_MATCH, ID_MONITOR, ID_SCALE, ID_FILTER, ID_PRESENT, ID_OUTPUT,
     ID_ALIGN, ID_CURSOR, ID_CLIP, ID_BORDER, ID_FPS, ID_FPSCORNER, ID_MINIMIZE, ID_AUTOSCALE, ID_TRAY_OPEN, ID_TRAY_EXIT, ID_START, ID_LOG, ID_INFO, ID_STATUS,
     HK_TOGGLE = 1, HK_PANIC = 2, TIMER_TICK = 1
 };
@@ -37,6 +37,7 @@ struct Settings {
     int scale = 0;    // 0 stretch, 1 fit
     int filter = 0;   // 0 bilinear, 1 point
     int present = 0;  // 0 no vsync, 1 vsync
+    int output = 0;   // 0 direct (hardware overlay), 1 compatible (composed by Windows)
     bool align = true, cursor = true, clip = true, border = true;
     bool fps = false;
     bool minimize = true;
@@ -61,7 +62,7 @@ void IniSet(const wchar_t* key, const std::wstring& v) { WritePrivateProfileStri
 
 struct App {
     HWND wnd = nullptr;
-    HWND cbSource, btnRefresh, stInfo, edMatch, cbMonitor, cbScale, cbFilter, cbPresent;
+    HWND cbSource, btnRefresh, stInfo, edMatch, cbMonitor, cbScale, cbFilter, cbPresent, cbOutput;
     HWND chkAlign, chkCursor, chkClip, chkBorder, chkFps, cbFpsCorner, chkMinimize, chkAutoScale, btnStart, stStatus, edLog;
     HFONT font = nullptr;
     UINT dpi = 96;
@@ -176,6 +177,7 @@ void SaveSettings() {
         c.monDevice = m.device; c.monName = m.friendly; c.monW = m.width; c.monH = m.height;
     }
     c.scale = ComboSel(g.cbScale); c.filter = ComboSel(g.cbFilter); c.present = ComboSel(g.cbPresent);
+    c.output = ComboSel(g.cbOutput);
     c.align = Checked(g.chkAlign); c.cursor = Checked(g.chkCursor); c.clip = Checked(g.chkClip); c.border = Checked(g.chkBorder);
     c.fps = Checked(g.chkFps); c.fpsCorner = ComboSel(g.cbFpsCorner); c.minimize = Checked(g.chkMinimize);
     c.autoScale = Checked(g.chkAutoScale);
@@ -187,6 +189,7 @@ void SaveSettings() {
     IniSet(L"Scaling", std::to_wstring(c.scale));
     IniSet(L"Filter", std::to_wstring(c.filter));
     IniSet(L"Present", std::to_wstring(c.present));
+    IniSet(L"OutputPath", std::to_wstring(c.output));
     IniSet(L"AlignSource", c.align ? L"1" : L"0");
     IniSet(L"DrawCursor", c.cursor ? L"1" : L"0");
     IniSet(L"ClipCursor", c.clip ? L"1" : L"0");
@@ -207,6 +210,7 @@ void LoadSettings() {
     c.scale = IniGetInt(L"Scaling", 0);
     c.filter = IniGetInt(L"Filter", 0);
     c.present = IniGetInt(L"Present", 0);
+    c.output = IniGetInt(L"OutputPath", 0);
     c.align = IniGetInt(L"AlignSource", 1) != 0;
     c.cursor = IniGetInt(L"DrawCursor", 1) != 0;
     c.clip = IniGetInt(L"ClipCursor", 1) != 0;
@@ -218,7 +222,7 @@ void LoadSettings() {
 }
 
 void SetControlsEnabled(bool en) {
-    for (HWND h : {g.cbSource, g.btnRefresh, g.edMatch, g.cbMonitor, g.cbScale, g.cbFilter, g.cbPresent,
+    for (HWND h : {g.cbSource, g.btnRefresh, g.edMatch, g.cbMonitor, g.cbScale, g.cbFilter, g.cbPresent, g.cbOutput,
                    g.chkAlign, g.chkCursor, g.chkClip, g.chkBorder, g.chkFps, g.cbFpsCorner, g.chkMinimize})
         EnableWindow(h, en);
     SetWindowTextW(g.btnStart, en ? L"Start Scaling  (Ctrl+Alt+S)" : L"Stop Scaling  (Ctrl+Alt+S)");
@@ -367,12 +371,22 @@ void StartScaling() {
         ShowWindow(src.hwnd, SW_RESTORE);
         for (int i = 0; i < 50 && IsIconic(src.hwnd); ++i) Sleep(20);
     }
+    if (IsZoomed(src.hwnd)) {
+        // A maximized game window renders at (nearly) the monitor's own shape, so there is nothing to stretch and
+        // the game draws far more pixels. Restore it to its normal (windowed 4:3) size - the game's own setting.
+        ShowWindow(src.hwnd, SW_RESTORE);
+        for (int i = 0; i < 50 && IsZoomed(src.hwnd); ++i) Sleep(20);
+        RECT cr{};
+        GetClientRect(src.hwnd, &cr);
+        Log(L"Game window was maximized - restored it to its normal size (%ldx%ld).", cr.right, cr.bottom);
+    }
     if (g.cfg.align) AlignSource(src.hwnd, mon.rect);
 
     ScalerOptions o;
     o.stretch = g.cfg.scale == 0;
     o.pointFilter = g.cfg.filter == 1;
     o.vsync = g.cfg.present == 1;
+    o.composedOutput = g.cfg.output == 1;
     o.drawCursor = g.cfg.cursor;
     o.hideBorder = g.cfg.border;
     o.fpsOverlay = g.cfg.fps;
@@ -463,6 +477,11 @@ void CreateControls() {
     g.cbPresent = MakeCtl(L"COMBOBOX", L"", cbStyle, 115, y, 513, 200, ID_PRESENT);
     AddItems(g.cbPresent, {L"Lowest latency: no VSync, Present(0), tearing flag if supported, 1-frame queue",
                            L"VSync: Present(1), 1-frame queue"}, g.cfg.present);
+    y += 34;
+    MakeCtl(L"STATIC", L"Output path", 0, 12, y + 3, 100, 20, -1);
+    g.cbOutput = MakeCtl(L"COMBOBOX", L"", cbStyle, 115, y, 513, 200, ID_OUTPUT);
+    AddItems(g.cbOutput, {L"Direct: hardware overlay, lowest latency",
+                          L"Compatible: composed by Windows, smoothest on some GPUs (+1 refresh, keeps NVIDIA colors)"}, g.cfg.output);
     y += 36;
     g.chkAlign = MakeCtl(L"BUTTON", L"Align source window to output monitor (moves only, never resizes)", BS_AUTOCHECKBOX | WS_TABSTOP, 12, y, 600, 20, ID_ALIGN);
     y += 24;
@@ -533,7 +552,7 @@ LRESULT CALLBACK MainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case ID_START: ToggleScaling(); break;
         case ID_REFRESH: RefreshSources(); RefreshMonitors(); break;
         case ID_SOURCE: if (HIWORD(wp) == CBN_SELCHANGE) UpdateSourceInfo(); break;
-        case ID_SCALE: case ID_FILTER: case ID_PRESENT: case ID_MONITOR: case ID_FPSCORNER:
+        case ID_SCALE: case ID_FILTER: case ID_PRESENT: case ID_OUTPUT: case ID_MONITOR: case ID_FPSCORNER:
             if (HIWORD(wp) == CBN_SELCHANGE) SaveSettings();
             break;
         case ID_ALIGN: case ID_CURSOR: case ID_CLIP: case ID_BORDER: case ID_FPS: case ID_MINIMIZE: case ID_AUTOSCALE:
@@ -674,7 +693,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int show) {
     RegisterClassExW(&wc);
 
     UINT dpi = GetDpiForSystem();
-    RECT r{0, 0, MulDiv(640, dpi, 96), MulDiv(714, dpi, 96)};
+    RECT r{0, 0, MulDiv(640, dpi, 96), MulDiv(748, dpi, 96)};
     AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi);
     HWND wnd = CreateWindowExW(0, wc.lpszClassName, L"StretchScaler - 4:3 stretch presenter",
                                WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
