@@ -1,0 +1,44 @@
+name: Bug report
+description: Something doesn't work (black screen, no stretch, stutter, cursor issues...)
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: StretchScaler.log
+      description: Paste the contents of StretchScaler.log (next to the exe). It is overwritten on every start, so copy it right after the problem.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: h1z1
+    attributes:
+      label: H1Z1 [Display] settings
+      description: The [Display] section of your UserOptions.ini
+      render: ini
+  - type: input
+    id: monitors
+    attributes:
+      label: Monitor(s)
+      placeholder: "2560x1440 @ 180 Hz (gaming), 3840x2160 @ 75 Hz (second)"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Windows version, GPU and driver
+      placeholder: "Windows 11 24H2, RTX 4060 Ti, driver 581.xx"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: StretchScaler version
+      placeholder: "v1.0.0"

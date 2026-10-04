@@ -1,0 +1,16 @@
+# build output
+bin/
+obj/
+out/
+build/
+dist/
+*.zip
+.vs/
+CMakeSettings.json
+
+# runtime files written next to the exe
+*.log
+*.ini
+
+# python
+__pycache__/

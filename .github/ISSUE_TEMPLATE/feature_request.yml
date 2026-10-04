@@ -1,0 +1,11 @@
+name: Feature request / setup report
+description: Suggest an improvement, or report how it works on your setup or another game
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Description
+      description: What would you like, or what did you test (game, GPU, resolution, refresh rate) and how did it go?
+    validations:
+      required: true
