@@ -195,6 +195,8 @@ struct Scaler::Impl {
     POINT lastCursorPos{-1, -1};
     HCURSOR lastCursorDrawn = nullptr;
     bool lastCursorVisible = false;
+    int64_t lastPresentTime = 0;                          // Qpc100ns of the last present with a new game frame
+    static constexpr int64_t kCursorOnlyAfter = 250000;   // 25 ms without game frames -> allow cursor-only redraws
 
     wd3d::IDirect3DDevice rtDevice{nullptr};
     wgc::GraphicsCaptureItem item{nullptr};
@@ -623,6 +625,7 @@ void Scaler::Impl::Render(int64_t frameTime100ns) {
         if (SUCCEEDED(media->GetFrameStatisticsMedia(&fs))) presentMode = (int)fs.CompositionMode;
     }
     nPresented++;
+    if (frameTime100ns > 0) lastPresentTime = Qpc100ns(); // last present carrying a new game frame
     if (frameTime100ns > 0) {
         // SystemRelativeTime is the DWM display time scheduled for the source frame; positive lead means we
         // presented the stretched copy before that slot.
@@ -665,13 +668,20 @@ void Scaler::Impl::RenderThread() {
                 bool ok = CopyFrame(frame);
                 frame.Close();
                 if (ok && visible) { Render(t); mustWaitSwapChain = true; }
-            } else if (visible && opt.drawCursor && srcSrv) {
+            } else if (visible && opt.drawCursor && srcSrv && Qpc100ns() - lastPresentTime > kCursorOnlyAfter) {
+                // Cursor-only redraw, for menus/loading screens where the game isn't sending new frames.
+                // While the game is producing frames the cursor is drawn with them; an extra present here
+                // would make the next real game frame wait a refresh (visible stutter).
                 CURSORINFO ci{sizeof(ci)};
                 if (GetCursorInfo(&ci)) {
-                    bool vis = (ci.flags & CURSOR_SHOWING) != 0;
-                    bool changed = ci.ptScreenPos.x != lastCursorPos.x || ci.ptScreenPos.y != lastCursorPos.y ||
-                                   ci.hCursor != lastCursorDrawn || (vis != lastCursorVisible && vis);
-                    if (changed || (!vis && lastCursorVisible)) { Render(0); mustWaitSwapChain = true; }
+                    RECT cl = lastClient;
+                    POINT p = ci.ptScreenPos;
+                    bool drawable = (ci.flags & CURSOR_SHOWING) && ci.hCursor &&
+                                    p.x >= cl.left && p.x < cl.right && p.y >= cl.top && p.y < cl.bottom;
+                    bool changed = drawable ? (!lastCursorVisible || p.x != lastCursorPos.x || p.y != lastCursorPos.y ||
+                                               ci.hCursor != lastCursorDrawn)
+                                            : lastCursorVisible; // only redraw once to erase it
+                    if (changed) { Render(0); mustWaitSwapChain = true; }
                 }
             }
         } catch (winrt::hresult_error const& e) {
