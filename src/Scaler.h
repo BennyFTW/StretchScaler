@@ -18,6 +18,8 @@ struct ScalerStats {
     uint32_t captured = 0;     // capture frames received since last call
     uint32_t presented = 0;    // presents since last call
     double avgLeadMs = 0;      // avg (source frame DWM display time - our Present time); positive = ahead
+    int presentMode = -1;      // DXGI_FRAME_PRESENTATION_MODE of our output: 0 composed, 1 overlay, 2 none/direct,
+                               // 3 composition failure, -1 unknown
 };
 
 // Captures `source` with Windows.Graphics.Capture, crops its client area, and presents it

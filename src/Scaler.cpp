@@ -1,4 +1,4 @@
-// Scaler: Windows.Graphics.Capture (window) -> crop client area on GPU -> stretch -> flip-model overlay.
+﻿// Scaler: Windows.Graphics.Capture (window) -> crop client area on GPU -> stretch -> flip-model overlay.
 #include <Unknwn.h>
 #include <windows.h>
 #include <d3d11_4.h>
@@ -201,6 +201,9 @@ struct Scaler::Impl {
     std::atomic<bool> stopPosted{false};
     std::atomic<uint32_t> nCaptured{0}, nPresented{0}, nLatency{0};
     std::atomic<int64_t> latencySum{0};
+    std::atomic<int> presentMode{-1};
+    uint32_t totalPresents = 0;
+    com_ptr<IDXGISwapChainMedia> media;
     bool loggedFirstFrame = false;
 
     // FPS overlay (Direct2D/DirectWrite drawn straight into the swap chain back buffer)
@@ -229,6 +232,17 @@ struct Scaler::Impl {
     void PostStopped(const wchar_t* why);
     void Release();
 };
+
+bool EnablePrivilege(const wchar_t* name) {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) return false;
+    TOKEN_PRIVILEGES tp{1};
+    bool ok = LookupPrivilegeValueW(nullptr, name, &tp.Privileges[0].Luid);
+    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    ok = ok && AdjustTokenPrivileges(token, FALSE, &tp, 0, nullptr, nullptr) && GetLastError() == ERROR_SUCCESS;
+    CloseHandle(token);
+    return ok;
+}
 
 bool Scaler::Impl::CreateDevice(HMONITOR hmon) {
     // Prefer the adapter driving the output monitor so presentation avoids a cross-adapter copy.
@@ -262,8 +276,11 @@ bool Scaler::Impl::CreateDevice(HMONITOR hmon) {
 
     // WGC uses the device from its own threads.
     if (auto mt = dev.try_as<ID3D11Multithread>()) mt->SetMultithreadProtected(TRUE);
+    // Let our tiny copy+stretch jump ahead of the game's GPU work so it isn't stuck behind a full game frame.
+    EnablePrivilege(SE_INC_BASE_PRIORITY_NAME);
     HRESULT gp = dxgiDev->SetGPUThreadPriority(7);
-    if (FAILED(gp)) Log(L"SetGPUThreadPriority(7) not permitted (0x%08X) - harmless.", gp);
+    if (FAILED(gp)) Log(L"GPU priority boost not permitted (0x%08X) - run as admin for it.", gp);
+    else Log(L"GPU priority boost enabled.");
     if (auto d1 = dxgiDev.try_as<IDXGIDevice1>()) d1->SetMaximumFrameLatency(1);
 
     com_ptr<::IInspectable> insp;
@@ -312,12 +329,13 @@ bool Scaler::Impl::CreateOverlay() {
     }
     // Topmost, never activated, click-through (LAYERED+TRANSPARENT), not in Alt+Tab (TOOLWINDOW),
     // no GDI redirection surface (content comes only from the flip-model swap chain).
+    // Measured: with these styles the output still lands on a hardware overlay plane (no DWM composition).
     overlay = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT |
                                   WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,
                               kOverlayClass, L"StretchScaler Output", WS_POPUP,
                               mon.left, mon.top, outW, outH, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!overlay) { Log(L"CreateWindowEx(overlay) failed: %lu", GetLastError()); return false; }
-    SetLayeredWindowAttributes(overlay, 0, 255, LWA_ALPHA);
+    SetLayeredWindowAttributes(overlay, 0, 255, LWA_ALPHA); // fully opaque, so it stays eligible for direct flip
     return true;
 }
 
@@ -351,6 +369,7 @@ bool Scaler::Impl::CreateSwapChain() {
     sc = sc1.as<IDXGISwapChain2>();
     sc->SetMaximumFrameLatency(1);
     waitable = sc->GetFrameLatencyWaitableObject();
+    media = sc.try_as<IDXGISwapChainMedia>();
 
     com_ptr<ID3D11Texture2D> bb;
     sc->GetBuffer(0, IID_PPV_ARGS(bb.put()));
@@ -597,6 +616,12 @@ void Scaler::Impl::Render(int64_t frameTime100ns) {
         return;
     }
     if (FAILED(hr)) Log(L"Present failed: 0x%08X", hr);
+    // About once a second, ask DXGI how our output reached the screen: composed by DWM (one extra refresh)
+    // or on a hardware overlay plane / direct flip (no extra composition).
+    if (media && (++totalPresents % 60) == 0) {
+        DXGI_FRAME_STATISTICS_MEDIA fs{};
+        if (SUCCEEDED(media->GetFrameStatisticsMedia(&fs))) presentMode = (int)fs.CompositionMode;
+    }
     nPresented++;
     if (frameTime100ns > 0) {
         // SystemRelativeTime is the DWM display time scheduled for the source frame; positive lead means we
@@ -675,6 +700,7 @@ void Scaler::Impl::Release() {
     cursor = {};
     srcSrv = nullptr; srcTex = nullptr; srcW = srcH = 0;
     rtv = nullptr;
+    media = nullptr;
     if (waitable) { CloseHandle(waitable); waitable = nullptr; }
     sc = nullptr;
     if (ctx) { ctx->ClearState(); ctx->Flush(); }
@@ -685,6 +711,7 @@ void Scaler::Impl::Release() {
     if (stopEvent) { CloseHandle(stopEvent); stopEvent = nullptr; }
     running = false;
     visible = false;
+    SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
 }
 
 Scaler::Scaler() : m(std::make_unique<Impl>()) {}
@@ -713,6 +740,7 @@ bool Scaler::Start(HWND source, HMONITOR monitor, const RECT& monitorRect, const
         return false;
     }
     if (opt.fpsOverlay) s.CreateTextOverlay();
+    SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
     s.running = true;
     s.thread = std::thread([&s] { s.RenderThread(); });
     return true;
@@ -749,5 +777,6 @@ ScalerStats Scaler::TakeStats() {
     uint32_t n = m->nLatency.exchange(0);
     int64_t sum = m->latencySum.exchange(0);
     st.avgLeadMs = n ? (double)sum / n / 10000.0 : 0;
+    st.presentMode = m->presentMode.load();
     return st;
 }

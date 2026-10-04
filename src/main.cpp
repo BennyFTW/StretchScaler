@@ -558,8 +558,16 @@ LRESULT CALLBACK MainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (++g.tick % 4 == 0) {
                 auto st = g.scaler.TakeStats();
                 wchar_t buf[256];
-                swprintf_s(buf, L"%s  |  capture %u fps  |  present %u fps  |  present lead vs. source frame %+.2f ms",
-                           g.overlayShown ? L"ACTIVE" : L"standby (game not focused)", st.captured, st.presented, st.avgLeadMs);
+                static const wchar_t* modes[] = {L"composed by DWM (+1 refresh)", L"hardware overlay (direct)",
+                                                 L"direct flip", L"composition failure"};
+                const wchar_t* mode = (st.presentMode >= 0 && st.presentMode <= 3) ? modes[st.presentMode] : L"measuring...";
+                static int lastMode = -2;
+                if (g.overlayShown && st.presentMode >= 0 && st.presentMode != lastMode) {
+                    lastMode = st.presentMode;
+                    Log(L"Output presentation mode: %s", mode);
+                }
+                swprintf_s(buf, L"%s  |  capture %u fps  |  present %u fps  |  lead %+.1f ms  |  output: %s",
+                           g.overlayShown ? L"ACTIVE" : L"standby", st.captured, st.presented, st.avgLeadMs, mode);
                 SetWindowTextW(g.stStatus, buf);
                 if (g.tick % 120 == 0) Log(L"%s", buf); // every 30 s (it may run in the background for hours)
                 SetTrayTip(std::wstring(L"StretchScaler - ") + (g.overlayShown ? L"ACTIVE" : L"standby"));

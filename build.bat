@@ -48,7 +48,7 @@ if errorlevel 1 (
     set "RC=1"
     goto :done
 )
-cl /nologo /std:c++17 /EHsc /O2 /W3 /MT /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /permissive- /Zc:__cplusplus /utf-8 /Fo"obj\\" /Fe"bin\StretchScaler.exe" src\*.cpp obj\app.res /link /SUBSYSTEM:WINDOWS /MANIFEST:EMBED /MANIFESTUAC:NO /MANIFESTINPUT:src\app.manifest d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib windowsapp.lib user32.lib gdi32.lib comctl32.lib Magnification.lib ole32.lib
+cl /nologo /std:c++20 /EHsc /O2 /W3 /MT /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /permissive- /Zc:__cplusplus /utf-8 /Fo"obj\\" /Fe"bin\StretchScaler.exe" src\*.cpp obj\app.res /link /SUBSYSTEM:WINDOWS /MANIFEST:EMBED /MANIFESTUAC:NO /MANIFESTINPUT:src\app.manifest d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib windowsapp.lib user32.lib gdi32.lib comctl32.lib Magnification.lib ole32.lib
 set "RC=%ERRORLEVEL%"
 
 echo.

@@ -5,7 +5,7 @@ if(NOT MSVC)
     message(FATAL_ERROR "StretchScaler requires MSVC (Visual Studio 2022 / Build Tools) and the Windows 10/11 SDK.")
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
