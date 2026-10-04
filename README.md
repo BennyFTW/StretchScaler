@@ -5,8 +5,8 @@
 <h1 align="center">StretchScaler</h1>
 
 <p align="center">
-  <b>Stretched resolution for H1Z1 / Z1 Battle Royale with instant Alt+Tab.</b><br>
-  Free, open source, no injection — a tiny external window scaler.
+  <b>Stretched resolution for H1Z1 with instant Alt+Tab.</b><br>
+  Built for the H1Z1 community servers (ROTK, Zemu, ...). Free, open source, no injection — a tiny external window scaler.
 </p>
 
 <p align="center">
@@ -19,6 +19,9 @@
 ---
 
 ## The problem
+
+Made for players on the H1Z1 community projects such as **ROTK** and **Zemu**, but it works with any game that
+can run in a window.
 
 Classic stretched res (e.g. 1440×1080 stretched to 1920×1080, or 1920×1440 stretched to 2560×1440) normally
 means running H1Z1 in **exclusive fullscreen** with GPU scaling. That works, but:
@@ -72,8 +75,9 @@ it handles every game launch after that.
 H1Z1 must run in **Windowed** mode (not Fullscreen, not Windowed Fullscreen) at a **4:3 size** that matches
 your monitor's height.
 
-Edit `UserOptions.ini` in your H1Z1 install folder (Steam → right-click the game → *Manage* →
-*Browse local files*) **while the game is closed**:
+Edit `UserOptions.ini` in your H1Z1 game folder (the client folder your community launcher — ROTK, Zemu,
+etc. — runs the game from; for a Steam install: right-click the game → *Manage* → *Browse local files*)
+**while the game is closed**:
 
 ```ini
 [Display]
@@ -134,7 +138,7 @@ Settings are saved in `StretchScaler.ini` next to the exe.
 
 ---
 
-## Is it safe with BattlEye?
+## Anti-cheat / server rules
 
 StretchScaler is **purely external**:
 
@@ -143,7 +147,9 @@ StretchScaler is **purely external**:
   (`Windows.Graphics.Capture`), and reads FPS from Windows' own present events (like PresentMon / FrameView);
 - the only thing it does to the game window is move it (position only) and minimize it on Alt+Tab, if enabled.
 
-**However, nobody but BattlEye can guarantee how BattlEye treats any third-party tool. Use at your own risk.**
+Community servers (ROTK, Zemu, ...) set their own rules and may run their own anti-cheat. **Check your server's
+rules on third-party tools before using it.** If you play somewhere with BattlEye or another anti-cheat, nobody
+but that anti-cheat's vendor can guarantee how it treats third-party tools. Use at your own risk.
 
 ---
 
