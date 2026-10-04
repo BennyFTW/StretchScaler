@@ -566,7 +566,7 @@ LRESULT CALLBACK MainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 swprintf_s(buf, L"%s  |  capture %u fps  |  present %u fps  |  lead %+.1f ms  |  output: %s",
                            g.overlayShown ? L"ACTIVE" : L"standby", st.captured, st.presented, st.avgLeadMs, mode);
                 SetWindowTextW(g.stStatus, buf);
-                if (g.tick % 120 == 0) Log(L"%s", buf); // every 30 s (it may run in the background for hours)
+                if (g.tick % 120 == 0 || g.tick == 24 || g.tick == 40) Log(L"%s", buf); // early samples, then every 30 s
                 SetTrayTip(std::wstring(L"StretchScaler - ") + (g.overlayShown ? L"ACTIVE" : L"standby"));
             }
         } else if (++g.tick % 4 == 0) {

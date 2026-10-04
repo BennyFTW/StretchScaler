@@ -16,6 +16,16 @@
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
+#include <inspectable.h>
+
+// IGraphicsCaptureSession5 (Windows 11 24H2+): MinUpdateInterval. Declared by hand so the project still builds
+// with older Windows SDKs. Without it, Windows.Graphics.Capture delivers at most ~60 frames per second.
+struct WgcTimeSpan { int64_t Duration; }; // 100 ns units, same layout as ABI::Windows::Foundation::TimeSpan
+MIDL_INTERFACE("67C0EA62-1F85-5061-925A-239BE0AC09CB")
+IGraphicsCaptureSession5Abi : public ::IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_MinUpdateInterval(WgcTimeSpan* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_MinUpdateInterval(WgcTimeSpan value) = 0;
+};
 
 #include <atomic>
 #include <thread>
@@ -449,6 +459,16 @@ bool Scaler::Impl::StartCapture() {
 
         // The real cursor is either drawn by us (scaled) or left as the hardware cursor; never baked into the capture.
         try { session.IsCursorCaptureEnabled(false); } catch (...) { Log(L"IsCursorCaptureEnabled not available."); }
+
+        // Lift the default ~60 fps capture cap. Values <= 1 ms are known to misbehave (~50 fps), so use 1.5 ms:
+        // still well under one refresh at 360 Hz, so every composed frame of the game gets delivered.
+        if (auto s5 = session.try_as<IGraphicsCaptureSession5Abi>()) {
+            HRESULT hr = s5->put_MinUpdateInterval(WgcTimeSpan{15000});
+            if (SUCCEEDED(hr)) Log(L"Capture rate cap removed (MinUpdateInterval 1.5 ms).");
+            else Log(L"Could not set MinUpdateInterval (0x%08X) - capture may be limited to ~60 fps.", hr);
+        } else {
+            Log(L"MinUpdateInterval not available on this Windows version - capture may be limited to ~60 fps.");
+        }
         if (opt.hideBorder) {
             try { session.IsBorderRequired(false); }
             catch (winrt::hresult_error const& e) { Log(L"Could not disable capture border: 0x%08X %s", (unsigned)e.code(), e.message().c_str()); }
